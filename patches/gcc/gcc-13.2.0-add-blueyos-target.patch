@@ -1,0 +1,85 @@
+diff --git a/config.sub b/config.sub
+--- a/config.sub
++++ b/config.sub
+@@ -1748,7 +1748,7 @@ case $os in
+ 	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+-	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
++	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* | blueyos* \
+ 	     | fiwix* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -843,6 +843,13 @@
+ *-*-fuchsia*)
+   native_system_header_dir=/include
+   ;;
++*-*-blueyos*)
++  gas=yes
++  gnu_ld=yes
++  default_use_cxa_atexit=yes
++  use_gcc_stdint=wrap
++  native_system_header_dir=/include
++  ;;
+ *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu | *-*-uclinuxfdpiceabi)
+   extra_options="$extra_options gnu-user.opt"
+   gas=yes
+@@ -3522,6 +3529,9 @@
+ 	tmake_file="${tmake_file} xtensa/t-xtensa"
+ 	extra_options="${extra_options} xtensa/uclinux.opt"
+ 	;;
++i[34567]86-*-blueyos*)
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h gnu-user.h glibc-stdint.h blueyos.h"
++	;;
+ am33_2.0-*-linux*)
+ 	tm_file="mn10300/mn10300.h elfos.h gnu-user.h linux.h glibc-stdint.h mn10300/linux.h"
+ 	gas=yes gnu_ld=yes
+diff --git a/gcc/config/blueyos.h b/gcc/config/blueyos.h
+new file mode 100644
+--- /dev/null
++++ b/gcc/config/blueyos.h
+@@ -0,0 +1,25 @@
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()                 \
++  do                                             \
++    {                                            \
++      builtin_define ("__blueyos__");            \
++      builtin_define ("__unix__");               \
++      builtin_assert ("system=blueyos");         \
++      builtin_assert ("system=unix");            \
++    }                                            \
++  while (0)
++
++#undef LIB_SPEC
++#define LIB_SPEC "-lc"
++
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC \
++  "%{!shared:%{pg:gcrt1.o%s}%{!pg:%{p:gcrt1.o%s}%{!p:%{pie:Scrt1.o%s}%{!pie:crt1.o%s}}}} crti.o%s %{shared|pie:crtbeginS.o%s;:crtbegin.o%s}"
++
++#undef ENDFILE_SPEC
++#define ENDFILE_SPEC \
++  "%{shared|pie:crtendS.o%s;:crtend.o%s} crtn.o%s"
++
++#undef LINK_SPEC
++#define LINK_SPEC \
++  "%{shared:-shared} %{static:-static} %{!shared:%{!static:%{!r:-dynamic-linker /lib/ld-blueyos.so.1}}}"
+diff --git a/libgcc/config.host b/libgcc/config.host
+--- a/libgcc/config.host
++++ b/libgcc/config.host
+@@ -758,6 +758,12 @@
+ 	tm_file="${tm_file} i386/elf-lib.h"
+ 	md_unwind_header=i386/gnu-unwind.h
+ 	;;
++i[34567]86-*-blueyos*)
++	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
++	tmake_file="${tmake_file} i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
++	tm_file="${tm_file} i386/elf-lib.h"
++	md_unwind_header=no-unwind.h
++	;;
+ x86_64-*-linux*)
+ 	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
+ 	tmake_file="${tmake_file} i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"

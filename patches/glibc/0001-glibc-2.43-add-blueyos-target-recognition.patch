@@ -1,0 +1,1110 @@
+diff -urN a/configure b/configure
+--- a/configure	2026-01-24 09:54:00.000000000 +1300
++++ b/configure	2026-04-18 17:22:27.549038928 +1200
+@@ -4805,6 +4805,8 @@
+ # $host_os of `gnu*' here to be `gnu-gnu*' just so that it can tell.
+ # This doesn't get used much beyond that, so it's fairly safe.
+ case "$host_os" in
++blueyos*)
++  ;;
+ linux*)
+   ;;
+ gnu*)
+@@ -4966,7 +4968,7 @@
+ ###
+ if test -z "$enable_hacker_mode" && test x"$libc_config_ok" != xyes; then
+   case "$machine-$host_os" in
+-  *-linux* | *-gnu*)
++  *-linux* | *-gnu* | *-blueyos*)
+     ;;
+   *)
+     as_fn_error $? "
+@@ -6496,6 +6498,8 @@
+ test "x$base_os" != x || case "$os" in
+ gnu*)
+   base_os=mach/hurd ;;
++blueyos*)
++  base_os=unix/sysv/linux ;;
+ linux*)
+   base_os=unix/sysv ;;
+ esac
+@@ -11003,4 +11007,3 @@
+ printf "%s\n" "$as_me: WARNING: unrecognized options: $ac_unrecognized_opts" >&2;}
+ fi
+ 
+-
+diff -urN a/configure.ac b/configure.ac
+--- a/configure.ac	2026-01-24 09:54:00.000000000 +1300
++++ b/configure.ac	2026-04-18 17:22:27.540832232 +1200
+@@ -395,6 +395,8 @@
+ # $host_os of `gnu*' here to be `gnu-gnu*' just so that it can tell.
+ # This doesn't get used much beyond that, so it's fairly safe.
+ case "$host_os" in
++blueyos*)
++  ;;
+ linux*)
+   ;;
+ gnu*)
+@@ -503,7 +505,7 @@
+ ###
+ if test -z "$enable_hacker_mode" && test x"$libc_config_ok" != xyes; then
+   case "$machine-$host_os" in
+-  *-linux* | *-gnu*)
++  *-linux* | *-gnu* | *-blueyos*)
+     ;;
+   *)
+     AC_MSG_ERROR([
+@@ -916,6 +918,8 @@
+ test "x$base_os" != x || case "$os" in
+ gnu*)
+   base_os=mach/hurd ;;
++blueyos*)
++  base_os=unix/sysv/linux ;;
+ linux*)
+   base_os=unix/sysv ;;
+ esac
+diff -urN a/abi-tags b/abi-tags
+--- a/abi-tags	2026-01-24 09:54:00.000000000 +1300
++++ b/abi-tags	2026-04-18 17:22:27.540832232 +1200
+@@ -27,6 +27,7 @@
+ .*-.*-knetbsd.*-gnu.*	4	1.6.0	# earliest compatible kernel version
+ 
+ .*-.*-syllable.*	5	2.0.0	# just an arbitrary value
++.*-.*-blueyos.*	6	0.0.0
+ 
+ # There is no catch-all default here because every supported OS that uses
+ # ELF must have its own unique ABI tag.
+diff -urN a/csu/Makefile b/csu/Makefile
+--- a/csu/Makefile	2026-01-24 09:54:00.000000000 +1300
++++ b/csu/Makefile	2026-04-18 17:36:28.754636405 +1200
+@@ -229,18 +229,26 @@
+ $(objpfx)abi-tag.h: $(..)abi-tags
+ 	$(make-target-directory)
+ 	rm -f $@.new
+-	sed -e 's/#.*$$//' -e '/^[	]*$$/d' $< | \
+-	while read conf tagos tagver; do \
+-	  test `expr '$(config-machine)-$(config-vendor)-$(config-os)' \
+-		     : "$$conf"` != 0 || continue; \
+-	  ( echo "$$tagos" | \
+-	    sed -e 's/[^0-9xXa-fA-F 	]//' \
+-		-e 's/^/#define __ABI_TAG_OS /'; \
+-	    echo "#ifndef __ABI_TAG_VERSION"; \
+-	    echo "$$tagver" | \
+-	    sed -e 's/[^0-9xXa-fA-F]/ /g' -e 's/ *$$//' \
+-	      -e 's/ /,/g' -e 's/^/# define __ABI_TAG_VERSION /'; \
+-	    echo "#endif" ) > $@.new; \
+-	done
++	case '$(config-os)' in \
++	blueyos) \
++	  { echo '#define __ABI_TAG_OS 6'; \
++	    echo '#ifndef __ABI_TAG_VERSION'; \
++	    echo '# define __ABI_TAG_VERSION 0,0,0'; \
++	    echo '#endif'; } > $@.new ;; \
++	*) \
++	  sed -e 's/#.*$$//' -e '/^[	]*$$/d' $< | \
++	  while read conf tagos tagver; do \
++	    test `expr '$(config-machine)-$(config-vendor)-$(config-os)' \
++		       : "$$conf"` != 0 || continue; \
++	    ( echo "$$tagos" | \
++	      sed -e 's/[^0-9xXa-fA-F 	]//' \
++		  -e 's/^/#define __ABI_TAG_OS /'; \
++	      echo "#ifndef __ABI_TAG_VERSION"; \
++	      echo "$$tagver" | \
++	      sed -e 's/[^0-9xXa-fA-F]/ /g' -e 's/ *$$//' \
++	        -e 's/ /,/g' -e 's/^/# define __ABI_TAG_VERSION /'; \
++	      echo "#endif" ) > $@.new; \
++	  done ;; \
++	esac
+ 	if test -r $@.new; then mv -f $@.new $@; \
+ 	else echo >&2 'This configuration not matched in $<'; exit 1; fi
+diff -urN a/scripts/config.sub b/scripts/config.sub
+--- a/scripts/config.sub	2026-01-24 09:54:00.000000000 +1300
++++ b/scripts/config.sub	2026-04-18 17:22:27.536728884 +1200
+@@ -1753,7 +1753,7 @@
+ 	     | skyos* | haiku* | rdos* | toppers* | drops* | es* \
+ 	     | onefs* | tirtos* | phoenix* | fuchsia* | redox* | bme* \
+ 	     | midnightbsd* | amdhsa* | unleashed* | emscripten* | wasi* \
+-	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* \
++	     | nsk* | powerunix* | genode* | zvmoe* | qnx* | emx* | zephyr* | blueyos* \
+ 	     | fiwix* )
+ 		;;
+ 	# This one is extra strict with allowed versions
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/configure b/sysdeps/unix/sysv/linux/blueyos/configure
+--- a/sysdeps/unix/sysv/linux/blueyos/configure	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/configure	2026-04-18 17:22:27.557245625 +1200
+@@ -0,0 +1,14 @@
++# Local configure fragment for sysdeps/unix/sysv/linux/blueyos.
++
++test -n "$libc_cv_slibdir" ||
++case "$prefix" in
++/usr | /usr/)
++  libc_cv_slibdir='/lib'
++  libc_cv_rtlddir='/lib'
++  ;;
++esac
++
++if test "$prefix" = "/usr/local" -o "$prefix" = "/usr/local/" -o "$prefix" = "NONE"; then
++  :
++fi
++use_ldconfig=no
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/bits/openat2.h b/sysdeps/unix/sysv/linux/blueyos/bits/openat2.h
+--- a/sysdeps/unix/sysv/linux/blueyos/bits/openat2.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/bits/openat2.h	2026-04-18 18:18:00.000000000 +1200
+@@ -0,0 +1,39 @@
++/* openat2 definition.  BlueyOS bootstrap override with a normal include
++   guard so reused Linux sysdeps can include this header more than once.  */
++
++#ifndef _BITS_OPENAT2_H
++#define _BITS_OPENAT2_H 1
++
++#ifndef _FCNTL_H
++# error "Never use <bits/openat2.h> directly; include <fcntl.h> instead."
++#endif
++
++#ifndef __glibc_has_open_how
++struct open_how
++{
++  __uint64_t flags;
++  __uint64_t mode;
++  __uint64_t resolve;
++};
++#endif
++
++#ifndef RESOLVE_NO_XDEV
++# define RESOLVE_NO_XDEV 0x01
++#endif
++#ifndef RESOLVE_NO_MAGICLINKS
++# define RESOLVE_NO_MAGICLINKS 0x02
++#endif
++#ifndef RESOLVE_NO_SYMLINKS
++# define RESOLVE_NO_SYMLINKS 0x04
++#endif
++#ifndef RESOLVE_BENEATH
++# define RESOLVE_BENEATH 0x08
++#endif
++#ifndef RESOLVE_IN_ROOT
++# define RESOLVE_IN_ROOT 0x10
++#endif
++#ifndef RESOLVE_CACHED
++# define RESOLVE_CACHED 0x20
++#endif
++
++#endif /* _BITS_OPENAT2_H */
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/clock_adjtime.c b/sysdeps/unix/sysv/linux/blueyos/clock_adjtime.c
+--- a/sysdeps/unix/sysv/linux/blueyos/clock_adjtime.c	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/clock_adjtime.c	2026-04-18 18:32:00.000000000 +1200
+@@ -0,0 +1,52 @@
++/* BlueyOS bootstrap override: keep clock_adjtime on the generic Linux
++   implementation but skip the hidden alias that trips the bootstrap GCC.  */
++
++#include <errno.h>
++#include <stdlib.h>
++#include <time.h>
++#include <sysdep.h>
++#include <sys/timex.h>
++#include <kernel-features.h>
++
++int
++__clock_adjtime64 (const clockid_t clock_id, struct __timex64 *tx64)
++{
++#ifndef __NR_clock_adjtime64
++# define __NR_clock_adjtime64 __NR_clock_adjtime
++#endif
++  int r = INLINE_SYSCALL_CALL (clock_adjtime64, clock_id, tx64);
++#ifndef __ASSUME_TIME64_SYSCALLS
++  if (r >= 0 || errno != ENOSYS)
++    return r;
++
++  if (tx64->modes & ADJ_SETOFFSET
++      && ! in_int32_t_range (tx64->time.tv_sec))
++    {
++      __set_errno (EOVERFLOW);
++      return -1;
++    }
++
++  struct timex tx32 = valid_timex64_to_timex (*tx64);
++  r = INLINE_SYSCALL_CALL (clock_adjtime, clock_id, &tx32);
++  if (r >= 0)
++    *tx64 = valid_timex_to_timex64 (tx32);
++#endif
++  return r;
++}
++
++#if __TIMESIZE != 64
++libc_hidden_def (__clock_adjtime64)
++
++int
++__clock_adjtime (const clockid_t clock_id, struct timex *tx)
++{
++  struct __timex64 tx64;
++  int retval;
++
++  tx64 = valid_timex_to_timex64 (*tx);
++  retval = __clock_adjtime64 (clock_id, &tx64);
++  if (retval >= 0)
++    *tx = valid_timex64_to_timex (tx64);
++
++  return retval;
++}
++#endif
++strong_alias (__clock_adjtime, clock_adjtime)
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/i386/dl-tls-get-addr.c b/sysdeps/unix/sysv/linux/blueyos/i386/dl-tls-get-addr.c
+--- a/sysdeps/unix/sysv/linux/blueyos/i386/dl-tls-get-addr.c	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/i386/dl-tls-get-addr.c	2026-04-18 17:22:27.557245625 +1200
+@@ -0,0 +1,37 @@
++/* BlueyOS i386 rtld TLS resolver bootstrap.
++   GCC on the current BlueyOS bootstrap toolchain reports missing C ifunc
++   support, so keep ld.so on the simplest resolver variant for now.  */
++
++#ifdef SHARED
++# define ___tls_get_addr __redirect____tls_get_addr
++# include <dl-tls.h>
++# undef ___tls_get_addr
++# undef __tls_get_addr
++
++extern void *_____tls_get_addr_fnsave (tls_index *ti)
++  __attribute__ ((__regparm__ (1))) attribute_hidden;
++
++extern void *___tls_get_addr (tls_index *ti)
++  __attribute__ ((__regparm__ (1)));
++
++rtld_hidden_proto (___tls_get_addr)
++
++void *
++__attribute__ ((__regparm__ (1)))
++___tls_get_addr (tls_index *ti)
++{
++  return _____tls_get_addr_fnsave (ti);
++}
++
++rtld_hidden_def (___tls_get_addr)
++
++/* The special thing about the x86 TLS ABI is that we have two
++   variants of the __tls_get_addr function with different calling
++   conventions.  The GNU version takes the parameter in a register,
++   while the Sun version uses the normal calling convention.  */
++void *
++__tls_get_addr (tls_index *ti)
++{
++  return ___tls_get_addr (ti);
++}
++#endif
+
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/asm/socket.h b/sysdeps/unix/sysv/linux/blueyos/asm/socket.h
+--- a/sysdeps/unix/sysv/linux/blueyos/asm/socket.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/asm/socket.h	2026-04-18 17:38:52.970744386 +1200
+@@ -0,0 +1,85 @@
++/* BlueyOS bootstrap Linux-compatible socket options.  */
++
++#ifndef _ASM_SOCKET_H
++#define _ASM_SOCKET_H 1
++
++#include <bits/socket-constants.h>
++
++#define SO_DEBUG                1
++#define SO_NO_CHECK             11
++#define SO_PRIORITY             12
++#define SO_BSDCOMPAT            14
++#define SO_REUSEPORT            15
++#define SO_PASSCRED             16
++#define SO_PEERCRED             17
++#define SO_PEERSEC              31
++#define SO_SNDBUFFORCE          32
++#define SO_RCVBUFFORCE          33
++#define SO_PROTOCOL             38
++#define SO_DOMAIN               39
++#define SO_SECURITY_AUTHENTICATION       22
++#define SO_SECURITY_ENCRYPTION_TRANSPORT 23
++#define SO_SECURITY_ENCRYPTION_NETWORK   24
++#define SO_BINDTODEVICE         25
++#define SO_ATTACH_FILTER        26
++#define SO_DETACH_FILTER        27
++#define SO_GET_FILTER           SO_ATTACH_FILTER
++#define SO_PEERNAME             28
++#define SCM_TIMESTAMP           SO_TIMESTAMP
++#define SO_PASSSEC              34
++#define SCM_TIMESTAMPNS         SO_TIMESTAMPNS
++#define SO_MARK                 36
++#define SCM_TIMESTAMPING        SO_TIMESTAMPING
++#define SO_RXQ_OVFL             40
++#define SO_WIFI_STATUS          41
++#define SCM_WIFI_STATUS         SO_WIFI_STATUS
++#define SO_PEEK_OFF             42
++#define SO_NOFCS                43
++#define SO_LOCK_FILTER          44
++#define SO_SELECT_ERR_QUEUE     45
++#define SO_BUSY_POLL            46
++#define SO_MAX_PACING_RATE      47
++#define SO_BPF_EXTENSIONS       48
++#define SO_INCOMING_CPU         49
++#define SO_ATTACH_BPF           50
++#define SO_DETACH_BPF           SO_DETACH_FILTER
++#define SO_ATTACH_REUSEPORT_CBPF 51
++#define SO_ATTACH_REUSEPORT_EBPF 52
++#define SO_CNX_ADVICE           53
++#define SCM_TIMESTAMPING_OPT_STATS 54
++#define SO_MEMINFO              55
++#define SO_INCOMING_NAPI_ID     56
++#define SO_COOKIE               57
++#define SCM_TIMESTAMPING_PKTINFO 58
++#define SO_PEERGROUPS           59
++#define SO_ZEROCOPY             60
++#define SO_TXTIME               61
++#define SCM_TXTIME              SO_TXTIME
++#define SO_BINDTOIFINDEX        62
++#define SO_DETACH_REUSEPORT_BPF 68
++#define SO_PREFER_BUSY_POLL     69
++#define SO_BUSY_POLL_BUDGET     70
++
++#define SOL_IP          0
++#define SOL_IPV6        41
++#define SOL_ICMPV6      58
++#define SOL_RAW         255
++#define SOL_DECNET      261
++#define SOL_X25         262
++#define SOL_PACKET      263
++#define SOL_ATM         264
++#define SOL_AAL         265
++#define SOL_IRDA        266
++#define SOL_NETBEUI     267
++#define SOL_LLC         268
++#define SOL_DCCP        269
++#define SOL_NETLINK     270
++#define SOL_TIPC        271
++#define SOL_RXRPC       272
++#define SOL_PPPOL2TP    273
++#define SOL_BLUETOOTH   274
++#define SOL_PNPIPE      275
++#define SOL_RDS         276
++#define SOL_IUCV        277
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/asm/ioctls.h b/sysdeps/unix/sysv/linux/blueyos/asm/ioctls.h
+--- a/sysdeps/unix/sysv/linux/blueyos/asm/ioctls.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/asm/ioctls.h	2026-04-18 18:22:00.000000000 +1200
+@@ -0,0 +1,8 @@
++/* BlueyOS bootstrap Linux-compatible ioctl numbers.  */
++
++#ifndef _ASM_IOCTL_H
++#define _ASM_IOCTL_H 1
++
++#include <bits/ioctl.h>
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/asm/types.h b/sysdeps/unix/sysv/linux/blueyos/asm/types.h
+--- a/sysdeps/unix/sysv/linux/blueyos/asm/types.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/asm/types.h	2026-04-18 18:35:00.000000000 +1200
+@@ -0,0 +1,8 @@
++/* BlueyOS bootstrap Linux-compatible asm integer types.  */
++
++#ifndef _ASM_TYPES_H
++#define _ASM_TYPES_H 1
++
++#include <linux/types.h>
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/sockios.h b/sysdeps/unix/sysv/linux/blueyos/linux/sockios.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/sockios.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/sockios.h	2026-04-18 18:22:00.000000000 +1200
+@@ -0,0 +1,54 @@
++/* BlueyOS bootstrap Linux-compatible socket ioctl numbers.  */
++
++#ifndef _LINUX_SOCKIOS_H
++#define _LINUX_SOCKIOS_H 1
++
++#define SIOCGIFNAME        0x8910
++#define SIOCSIFLINK        0x8911
++#define SIOCGIFCONF        0x8912
++#define SIOCGIFFLAGS       0x8913
++#define SIOCSIFFLAGS       0x8914
++#define SIOCGIFADDR        0x8915
++#define SIOCSIFADDR        0x8916
++#define SIOCGIFDSTADDR     0x8917
++#define SIOCSIFDSTADDR     0x8918
++#define SIOCGIFBRDADDR     0x8919
++#define SIOCSIFBRDADDR     0x891a
++#define SIOCGIFNETMASK     0x891b
++#define SIOCSIFNETMASK     0x891c
++#define SIOCGIFMETRIC      0x891d
++#define SIOCSIFMETRIC      0x891e
++#define SIOCGIFMEM         0x891f
++#define SIOCSIFMEM         0x8920
++#define SIOCGIFMTU         0x8921
++#define SIOCSIFMTU         0x8922
++#define SIOCSIFNAME        0x8923
++#define SIOCSIFHWADDR      0x8924
++#define SIOCGIFENCAP       0x8925
++#define SIOCSIFENCAP       0x8926
++#define SIOCGIFHWADDR      0x8927
++#define SIOCGIFSLAVE       0x8929
++#define SIOCSIFSLAVE       0x8930
++#define SIOCADDMULTI       0x8931
++#define SIOCDELMULTI       0x8932
++#define SIOCGIFINDEX       0x8933
++#define SIOGIFINDEX        SIOCGIFINDEX
++#define SIOCSIFPFLAGS      0x8934
++#define SIOCGIFPFLAGS      0x8935
++#define SIOCDIFADDR        0x8936
++#define SIOCSIFHWBROADCAST 0x8937
++#define SIOCGIFCOUNT       0x8938
++#define SIOCGIFTXQLEN      0x8942
++#define SIOCSIFTXQLEN      0x8943
++#define SIOCDARP           0x8953
++#define SIOCGARP           0x8954
++#define SIOCSARP           0x8955
++#define SIOCDRARP          0x8960
++#define SIOCGRARP          0x8961
++#define SIOCSRARP          0x8962
++#define SIOCGIFMAP         0x8970
++#define SIOCSIFMAP         0x8971
++#define SIOCDEVPRIVATE     0x89F0
++#define SIOCPROTOPRIVATE   0x89E0
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/errno.h b/sysdeps/unix/sysv/linux/blueyos/linux/errno.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/errno.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/errno.h	2026-04-18 17:22:27.557245625 +1200
+@@ -0,0 +1,144 @@
++/* BlueyOS bootstrap errno values.
++   These currently track the values exposed by the musl-based bootstrap
++   headers so the reused Linux sysdeps layer can build before BlueyOS has
++   a dedicated kernel-uapi header package.  */
++
++#ifndef _LINUX_ERRNO_H
++#define _LINUX_ERRNO_H 1
++
++#define EPERM            1
++#define ENOENT           2
++#define ESRCH            3
++#define EINTR            4
++#define EIO              5
++#define ENXIO            6
++#define E2BIG            7
++#define ENOEXEC          8
++#define EBADF            9
++#define ECHILD          10
++#define EAGAIN          11
++#define ENOMEM          12
++#define EACCES          13
++#define EFAULT          14
++#define ENOTBLK         15
++#define EBUSY           16
++#define EEXIST          17
++#define EXDEV           18
++#define ENODEV          19
++#define ENOTDIR         20
++#define EISDIR          21
++#define EINVAL          22
++#define ENFILE          23
++#define EMFILE          24
++#define ENOTTY          25
++#define ETXTBSY         26
++#define EFBIG           27
++#define ENOSPC          28
++#define ESPIPE          29
++#define EROFS           30
++#define EMLINK          31
++#define EPIPE           32
++#define EDOM            33
++#define ERANGE          34
++#define EDEADLK         35
++#define ENAMETOOLONG    36
++#define ENOLCK          37
++#define ENOSYS          38
++#define ENOTEMPTY       39
++#define ELOOP           40
++#define EWOULDBLOCK     EAGAIN
++#define ENOMSG          42
++#define EIDRM           43
++#define ECHRNG          44
++#define EL2NSYNC        45
++#define EL3HLT          46
++#define EL3RST          47
++#define ELNRNG          48
++#define EUNATCH         49
++#define ENOCSI          50
++#define EL2HLT          51
++#define EBADE           52
++#define EBADR           53
++#define EXFULL          54
++#define ENOANO          55
++#define EBADRQC         56
++#define EBADSLT         57
++#define EDEADLOCK       EDEADLK
++#define EBFONT          59
++#define ENOSTR          60
++#define ENODATA         61
++#define ETIME           62
++#define ENOSR           63
++#define ENONET          64
++#define ENOPKG          65
++#define EREMOTE         66
++#define ENOLINK         67
++#define EADV            68
++#define ESRMNT          69
++#define ECOMM           70
++#define EPROTO          71
++#define EMULTIHOP       72
++#define EDOTDOT         73
++#define EBADMSG         74
++#define EOVERFLOW       75
++#define ENOTUNIQ        76
++#define EBADFD          77
++#define EREMCHG         78
++#define ELIBACC         79
++#define ELIBBAD         80
++#define ELIBSCN         81
++#define ELIBMAX         82
++#define ELIBEXEC        83
++#define EILSEQ          84
++#define ERESTART        85
++#define ESTRPIPE        86
++#define EUSERS          87
++#define ENOTSOCK        88
++#define EDESTADDRREQ    89
++#define EMSGSIZE        90
++#define EPROTOTYPE      91
++#define ENOPROTOOPT     92
++#define EPROTONOSUPPORT 93
++#define ESOCKTNOSUPPORT 94
++#define EOPNOTSUPP      95
++#define ENOTSUP         EOPNOTSUPP
++#define EPFNOSUPPORT    96
++#define EAFNOSUPPORT    97
++#define EADDRINUSE      98
++#define EADDRNOTAVAIL   99
++#define ENETDOWN        100
++#define ENETUNREACH     101
++#define ENETRESET       102
++#define ECONNABORTED    103
++#define ECONNRESET      104
++#define ENOBUFS         105
++#define EISCONN         106
++#define ENOTCONN        107
++#define ESHUTDOWN       108
++#define ETOOMANYREFS    109
++#define ETIMEDOUT       110
++#define ECONNREFUSED    111
++#define EHOSTDOWN       112
++#define EHOSTUNREACH    113
++#define EALREADY        114
++#define EINPROGRESS     115
++#define ESTALE          116
++#define EUCLEAN         117
++#define ENOTNAM         118
++#define ENAVAIL         119
++#define EISNAM          120
++#define EREMOTEIO       121
++#define EDQUOT          122
++#define ENOMEDIUM       123
++#define EMEDIUMTYPE     124
++#define ECANCELED       125
++#define ENOKEY          126
++#define EKEYEXPIRED     127
++#define EKEYREVOKED     128
++#define EKEYREJECTED    129
++#define EOWNERDEAD      130
++#define ENOTRECOVERABLE 131
++#define ERFKILL         132
++#define EHWPOISON       133
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/atalk.h b/sysdeps/unix/sysv/linux/blueyos/linux/atalk.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/atalk.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/atalk.h	2026-04-18 18:42:00.000000000 +1200
+@@ -0,0 +1,21 @@
++/* BlueyOS bootstrap Linux-compatible AppleTalk socket definitions.  */
++
++#ifndef _LINUX_ATALK_H
++#define _LINUX_ATALK_H 1
++
++#include <linux/types.h>
++
++struct atalk_addr
++{
++  __u16 s_net;
++  __u8 s_node;
++};
++
++struct sockaddr_at
++{
++  sa_family_t sat_family;
++  __u8 sat_port;
++  struct atalk_addr sat_addr;
++};
++ 
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/falloc.h b/sysdeps/unix/sysv/linux/blueyos/linux/falloc.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/falloc.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/falloc.h	2026-04-18 17:40:02.126155699 +1200
+@@ -0,0 +1,13 @@
++/* BlueyOS bootstrap Linux-compatible fallocate flags.  */
++
++#ifndef _LINUX_FALLOC_H
++#define _LINUX_FALLOC_H 1
++
++#define FALLOC_FL_KEEP_SIZE      0x01
++#define FALLOC_FL_PUNCH_HOLE     0x02
++#define FALLOC_FL_COLLAPSE_RANGE 0x08
++#define FALLOC_FL_ZERO_RANGE     0x10
++#define FALLOC_FL_INSERT_RANGE   0x20
++#define FALLOC_FL_UNSHARE_RANGE  0x40
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/fanotify.h b/sysdeps/unix/sysv/linux/blueyos/linux/fanotify.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/fanotify.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/fanotify.h	2026-04-18 18:26:00.000000000 +1200
+@@ -0,0 +1,6 @@
++/* BlueyOS bootstrap Linux-compatible fanotify definitions.  */
++
++#ifndef _LINUX_FANOTIFY_H
++#define _LINUX_FANOTIFY_H 1
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/if_ether.h b/sysdeps/unix/sysv/linux/blueyos/linux/if_ether.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/if_ether.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/if_ether.h	2026-04-18 18:48:00.000000000 +1200
+@@ -0,0 +1,15 @@
++/* BlueyOS bootstrap Linux-compatible ethernet definitions.  */
++
++#ifndef _LINUX_IF_ETHER_H
++#define _LINUX_IF_ETHER_H 1
++
++#define ETH_ALEN       6
++#define ETH_HLEN       14
++#define ETH_ZLEN       60
++#define ETH_DATA_LEN   1500
++#define ETH_FRAME_LEN  1514
++
++#define ETH_P_IP       0x0800
++#define ETH_P_ARP      0x0806
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/kernel.h b/sysdeps/unix/sysv/linux/blueyos/linux/kernel.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/kernel.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/kernel.h	2026-04-18 18:14:00.000000000 +1200
+@@ -0,0 +1,28 @@
++/* BlueyOS bootstrap Linux-compatible kernel interfaces.  */
++
++#ifndef _LINUX_KERNEL_H
++#define _LINUX_KERNEL_H 1
++
++#define SI_LOAD_SHIFT 16
++
++struct sysinfo
++{
++  long uptime;
++  unsigned long loads[3];
++  unsigned long totalram;
++  unsigned long freeram;
++  unsigned long sharedram;
++  unsigned long bufferram;
++  unsigned long totalswap;
++  unsigned long freeswap;
++  unsigned short procs;
++  unsigned short pad;
++  unsigned long totalhigh;
++  unsigned long freehigh;
++  unsigned int mem_unit;
++  char _f[20 - 2 * sizeof (unsigned long) - sizeof (unsigned int)];
++};
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/limits.h b/sysdeps/unix/sysv/linux/blueyos/linux/limits.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/limits.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/limits.h	2026-04-18 17:32:29.920175428 +1200
+@@ -0,0 +1,22 @@
++/* BlueyOS bootstrap Linux-compatible limits.
++   These values match the current BlueyOS userspace headers closely enough
++   for the reused Linux sysdeps bootstrap path.  */
++
++#ifndef _LINUX_LIMITS_H
++#define _LINUX_LIMITS_H 1
++
++#define NR_OPEN         1024
++#define NGROUPS_MAX     65536
++#define ARG_MAX         131072
++#define LINK_MAX        127
++#define MAX_CANON       255
++#define MAX_INPUT       255
++#define NAME_MAX        255
++#define PATH_MAX        4096
++#define PIPE_BUF        4096
++#define XATTR_NAME_MAX  255
++#define XATTR_SIZE_MAX  65536
++#define XATTR_LIST_MAX  65536
++#define RTSIG_MAX       32
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/param.h b/sysdeps/unix/sysv/linux/blueyos/linux/param.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/param.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/param.h	2026-04-18 17:36:27.105925245 +1200
+@@ -0,0 +1,11 @@
++/* BlueyOS bootstrap Linux-compatible kernel parameters.  */
++
++#ifndef _LINUX_PARAM_H
++#define _LINUX_PARAM_H 1
++
++#define HZ              100
++#define EXEC_PAGESIZE   4096
++#define NOGROUP         65535
++#define MAXHOSTNAMELEN  255
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/posix_types.h b/sysdeps/unix/sysv/linux/blueyos/linux/posix_types.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/posix_types.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/posix_types.h	2026-04-18 18:45:00.000000000 +1200
+@@ -0,0 +1,10 @@
++/* BlueyOS bootstrap Linux-compatible POSIX kernel types.  */
++
++#ifndef _LINUX_POSIX_TYPES_H
++#define _LINUX_POSIX_TYPES_H 1
++
++#include <linux/types.h>
++
++typedef unsigned short __kernel_mode_t;
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/prctl.h b/sysdeps/unix/sysv/linux/blueyos/linux/prctl.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/prctl.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/prctl.h	2026-04-18 18:10:00.000000000 +1200
+@@ -0,0 +1,10 @@
++/* BlueyOS bootstrap Linux-compatible prctl operations.  */
++
++#ifndef _LINUX_PRCTL_H
++#define _LINUX_PRCTL_H 1
++
++#define PR_SET_NAME 15
++#define PR_GET_NAME 16
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/linux/types.h b/sysdeps/unix/sysv/linux/blueyos/linux/types.h
+--- a/sysdeps/unix/sysv/linux/blueyos/linux/types.h	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/linux/types.h	2026-04-18 17:32:29.920175428 +1200
+@@ -0,0 +1,37 @@
++/* BlueyOS bootstrap Linux-compatible integral types.
++   This is enough for the Linux sysdeps headers reused during early glibc
++   bring-up on i686 BlueyOS.  */
++
++#ifndef _LINUX_TYPES_H
++#define _LINUX_TYPES_H 1
++
++#include <stdint.h>
++
++typedef int8_t __s8;
++typedef uint8_t __u8;
++typedef int16_t __s16;
++typedef uint16_t __u16;
++typedef int32_t __s32;
++typedef uint32_t __u32;
++typedef int64_t __s64;
++typedef uint64_t __u64;
++typedef __u16 __be16;
++typedef __u32 __be32;
++typedef __u64 __be64;
++typedef __u16 __le16;
++typedef __u32 __le32;
++typedef __u64 __le64;
++
++#define __aligned_u64 __u64 __attribute__ ((__aligned__ (8)))
++#define __aligned_s64 __s64 __attribute__ ((__aligned__ (8)))
++
++typedef unsigned long __kernel_ulong_t;
++typedef long __kernel_long_t;
++typedef unsigned long __kernel_size_t;
++typedef long __kernel_ssize_t;
++typedef __kernel_long_t __kernel_ptrdiff_t;
++typedef __kernel_long_t __kernel_off_t;
++typedef long long __kernel_loff_t;
++typedef int __kernel_pid_t;
++typedef unsigned int __kernel_uid32_t;
++typedef unsigned int __kernel_gid32_t;
++typedef unsigned short __kernel_old_uid_t;
++typedef unsigned short __kernel_old_gid_t;
++typedef __kernel_long_t __kernel_time_t;
++typedef __kernel_long_t __kernel_clock_t;
++
++#endif
+diff -urN a/sysdeps/unix/sysv/linux/blueyos/i386/shlib-versions b/sysdeps/unix/sysv/linux/blueyos/i386/shlib-versions
+--- a/sysdeps/unix/sysv/linux/blueyos/i386/shlib-versions	1970-01-01 12:00:00.000000000 +1200
++++ b/sysdeps/unix/sysv/linux/blueyos/i386/shlib-versions	2026-04-18 17:22:27.557245625 +1200
+@@ -0,0 +1 @@
++ld=ld-blueyos.so.1
+diff -urN a/sysdeps/unix/sysv/linux/configure b/sysdeps/unix/sysv/linux/configure
+--- a/sysdeps/unix/sysv/linux/configure	2026-01-24 09:54:00.000000000 +1300
++++ b/sysdeps/unix/sysv/linux/configure	2026-04-18 17:22:27.553142277 +1200
+@@ -7,13 +7,19 @@
+ fi
+ 
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking installed Linux kernel header files" >&5
++case "$host_os" in
++blueyos*)
++  libc_cv_linux320='skipped for BlueyOS'
++  libc_minimum_kernel=ok
++  ;;
++*)
++  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking installed Linux kernel header files" >&5
+ printf %s "checking installed Linux kernel header files... " >&6; }
+-if test ${libc_cv_linux320+y}
+-then :
+-  printf %s "(cached) " >&6
+-else case e in #(
+-  e) cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++  if test ${libc_cv_linux320+y}
++  then :
++    printf %s "(cached) " >&6
++  else case e in #(
++    e) cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <linux/version.h>
+ #if !defined LINUX_VERSION_CODE || LINUX_VERSION_CODE <  (3 *65536+ 2 *256+ 0) /* 3.2.0 */
+@@ -27,20 +33,20 @@
+   return 0;
+ }
+ _ACEOF
+-if ac_fn_c_try_cpp "$LINENO"
+-then :
+-  libc_cv_linux320='3.2.0 or later'
+-else case e in #(
+-  e) libc_cv_linux320='missing or too old!' ;;
+-esac
+-fi
+-rm -f conftest.err conftest.i conftest.$ac_ext ;;
+-esac
+-fi
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $libc_cv_linux320" >&5
++  if ac_fn_c_try_cpp "$LINENO"
++  then :
++    libc_cv_linux320='3.2.0 or later'
++  else case e in #(
++    e) libc_cv_linux320='missing or too old!' ;;
++  esac
++  fi
++  rm -f conftest.err conftest.i conftest.$ac_ext ;;
++  esac
++  fi
++  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $libc_cv_linux320" >&5
+ printf "%s\n" "$libc_cv_linux320" >&6; }
+-if test "$libc_cv_linux320" != '3.2.0 or later'; then
+-  as_fn_error $? "GNU libc requires kernel header files from
++  if test "$libc_cv_linux320" != '3.2.0 or later'; then
++    as_fn_error $? "GNU libc requires kernel header files from
+ Linux 3.2.0 or later to be installed before configuring.
+ The kernel header files are found usually in /usr/include/asm and
+ /usr/include/linux; make sure these directories use files from
+@@ -48,7 +54,9 @@
+ make sure that file was built correctly when installing the kernel header
+ files.  To use kernel headers not from /usr/include/linux, use the
+ configure option --with-headers." "$LINENO" 5
+-fi
++  fi
++  ;;
++esac
+ 
+ # If the user gave a minimal version number test whether the available
+ # kernel headers are young enough.  Additionally we have minimal
+@@ -71,12 +79,16 @@
+   minimum_kernel=$arch_minimum_kernel
+ fi
+ 
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for kernel header at least $minimum_kernel" >&5
++case "$host_os" in
++blueyos*)
++  ;;
++*)
++  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for kernel header at least $minimum_kernel" >&5
+ printf %s "checking for kernel header at least $minimum_kernel... " >&6; }
+-decnum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/(\1 * 65536 + \2 * 256 + \3)/'`;
+-abinumstr=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1.\2.\3/'`;
+-abinum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1,\2,\3/'`;
+-cat confdefs.h - <<_ACEOF >conftest.$ac_ext
++  decnum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/(\1 * 65536 + \2 * 256 + \3)/'`;
++  abinumstr=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1.\2.\3/'`;
++  abinum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1,\2,\3/'`;
++  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ #include <linux/version.h>
+ #if LINUX_VERSION_CODE < $decnum
+@@ -90,27 +102,29 @@
+   return 0;
+ }
+ _ACEOF
+-if ac_fn_c_try_cpp "$LINENO"
+-then :
+-  libc_minimum_kernel=ok
+-else case e in #(
+-  e) libc_minimum_kernel='too old!' ;;
+-esac
+-fi
+-rm -f conftest.err conftest.i conftest.$ac_ext
+-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $libc_minimum_kernel" >&5
++  if ac_fn_c_try_cpp "$LINENO"
++  then :
++    libc_minimum_kernel=ok
++  else case e in #(
++    e) libc_minimum_kernel='too old!' ;;
++  esac
++  fi
++  rm -f conftest.err conftest.i conftest.$ac_ext
++  { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $libc_minimum_kernel" >&5
+ printf "%s\n" "$libc_minimum_kernel" >&6; }
+-if test "$libc_minimum_kernel" = ok; then
+-  printf "%s\n" "#define __LINUX_KERNEL_VERSION $decnum" >>confdefs.h
++  if test "$libc_minimum_kernel" = ok; then
++    printf "%s\n" "#define __LINUX_KERNEL_VERSION $decnum" >>confdefs.h
+ 
+-  printf "%s\n" "#define __LINUX_KERNEL_VERSION_STR \"$abinumstr\"" >>confdefs.h
++    printf "%s\n" "#define __LINUX_KERNEL_VERSION_STR \"$abinumstr\"" >>confdefs.h
+ 
+-  printf "%s\n" "#define __ABI_TAG_VERSION $abinum" >>confdefs.h
++    printf "%s\n" "#define __ABI_TAG_VERSION $abinum" >>confdefs.h
+ 
+-else
+-  as_fn_error $? "*** The available kernel headers are older than the requested
++  else
++    as_fn_error $? "*** The available kernel headers are older than the requested
+ *** compatible kernel version" "$LINENO" 5
+-fi
++  fi
++  ;;
++esac
+ 
+ if test -n "$sysheaders"; then
+   CPPFLAGS=$OLD_CPPFLAGS
+@@ -134,7 +148,14 @@
+ 
+ 
+ # One Linux we use ldconfig.
+-use_ldconfig=yes
++case "$host_os" in
++blueyos*)
++  use_ldconfig=no
++  ;;
++*)
++  use_ldconfig=yes
++  ;;
++esac
+ 
+ if test $host = $build; then
+   # If $prefix/include/{net,scsi} are symlinks, make install will
+@@ -170,4 +191,3 @@
+ # We have inlined syscalls.
+ printf "%s\n" "#define HAVE_INLINED_SYSCALLS 1" >>confdefs.h
+ 
+-
+diff -urN a/sysdeps/unix/sysv/linux/configure.ac b/sysdeps/unix/sysv/linux/configure.ac
+--- a/sysdeps/unix/sysv/linux/configure.ac	2026-01-24 09:54:00.000000000 +1300
++++ b/sysdeps/unix/sysv/linux/configure.ac	2026-04-18 17:22:27.549038928 +1200
+@@ -7,17 +7,23 @@
+   CPPFLAGS="$CPPFLAGS $SYSINCLUDES"
+ fi
+ define([libc_cv_linuxVER], [libc_cv_linux]patsubst(LIBC_LINUX_VERSION,[\.]))dnl
+-AC_CACHE_CHECK(installed Linux kernel header files, libc_cv_linuxVER, [dnl
+-AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[#include <linux/version.h>
+-#if !defined LINUX_VERSION_CODE || LINUX_VERSION_CODE < ]dnl
+-patsubst(LIBC_LINUX_VERSION,[^\([^.]*\)\.\([^.]*\)\.\([^.]*\)$],dnl
+-[ (\1 *65536+ \2 *256+ \3) /* \1.\2.\3 */])[
+-# error kernel headers missing or too old
+-#endif]], [[]])],
+-	       [libc_cv_linuxVER='LIBC_LINUX_VERSION or later'],
+-	       [libc_cv_linuxVER='missing or too old!'])])
+-if test "$libc_cv_linuxVER" != 'LIBC_LINUX_VERSION or later'; then
+-  AC_MSG_ERROR([GNU libc requires kernel header files from
++case "$host_os" in
++blueyos*)
++  libc_cv_linuxVER='skipped for BlueyOS'
++  libc_minimum_kernel=ok
++  ;;
++*)
++  AC_CACHE_CHECK(installed Linux kernel header files, libc_cv_linuxVER, [dnl
++  AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[#include <linux/version.h>
++  #if !defined LINUX_VERSION_CODE || LINUX_VERSION_CODE < ]dnl
++  patsubst(LIBC_LINUX_VERSION,[^\([^.]*\)\.\([^.]*\)\.\([^.]*\)$],dnl
++  [ (\1 *65536+ \2 *256+ \3) /* \1.\2.\3 */])[
++  # error kernel headers missing or too old
++  #endif]], [[]])],
++  	       [libc_cv_linuxVER='LIBC_LINUX_VERSION or later'],
++  	       [libc_cv_linuxVER='missing or too old!'])])
++  if test "$libc_cv_linuxVER" != 'LIBC_LINUX_VERSION or later'; then
++    AC_MSG_ERROR([GNU libc requires kernel header files from
+ Linux LIBC_LINUX_VERSION or later to be installed before configuring.
+ The kernel header files are found usually in /usr/include/asm and
+ /usr/include/linux; make sure these directories use files from
+@@ -25,7 +31,9 @@
+ make sure that file was built correctly when installing the kernel header
+ files.  To use kernel headers not from /usr/include/linux, use the
+ configure option --with-headers.])
+-fi
++  fi
++  ;;
++esac
+ 
+ # If the user gave a minimal version number test whether the available
+ # kernel headers are young enough.  Additionally we have minimal
+@@ -47,25 +55,31 @@
+   minimum_kernel=$arch_minimum_kernel
+ fi
+ 
+-AC_MSG_CHECKING(for kernel header at least $minimum_kernel)
+-changequote(,)dnl
+-decnum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/(\1 * 65536 + \2 * 256 + \3)/'`;
+-abinumstr=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1.\2.\3/'`;
+-abinum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1,\2,\3/'`;
+-changequote([,])dnl
+-AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[#include <linux/version.h>
+-#if LINUX_VERSION_CODE < $decnum
+-# error kernel headers too old
+-#endif]], [[]])], [libc_minimum_kernel=ok], [libc_minimum_kernel='too old!'])
+-AC_MSG_RESULT($libc_minimum_kernel)
+-if test "$libc_minimum_kernel" = ok; then
+-  AC_DEFINE_UNQUOTED(__LINUX_KERNEL_VERSION, $decnum)
+-  AC_DEFINE_UNQUOTED(__LINUX_KERNEL_VERSION_STR, "$abinumstr")
+-  AC_DEFINE_UNQUOTED(__ABI_TAG_VERSION, $abinum)
+-else
+-  AC_MSG_ERROR([*** The available kernel headers are older than the requested
++case "$host_os" in
++blueyos*)
++  ;;
++*)
++  AC_MSG_CHECKING(for kernel header at least $minimum_kernel)
++  changequote(,)dnl
++  decnum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/(\1 * 65536 + \2 * 256 + \3)/'`;
++  abinumstr=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1.\2.\3/'`;
++  abinum=`echo "$minimum_kernel.0.0.0" | sed 's/\([0-9]*\)\.\([0-9]*\)\.\([0-9]*\).*/\1,\2,\3/'`;
++  changequote([,])dnl
++  AC_PREPROC_IFELSE([AC_LANG_PROGRAM([[#include <linux/version.h>
++  #if LINUX_VERSION_CODE < $decnum
++  # error kernel headers too old
++  #endif]], [[]])], [libc_minimum_kernel=ok], [libc_minimum_kernel='too old!'])
++  AC_MSG_RESULT($libc_minimum_kernel)
++  if test "$libc_minimum_kernel" = ok; then
++    AC_DEFINE_UNQUOTED(__LINUX_KERNEL_VERSION, $decnum)
++    AC_DEFINE_UNQUOTED(__LINUX_KERNEL_VERSION_STR, "$abinumstr")
++    AC_DEFINE_UNQUOTED(__ABI_TAG_VERSION, $abinum)
++  else
++    AC_MSG_ERROR([*** The available kernel headers are older than the requested
+ *** compatible kernel version])
+-fi
++  fi
++  ;;
++esac
+ 
+ if test -n "$sysheaders"; then
+   CPPFLAGS=$OLD_CPPFLAGS
+@@ -89,7 +103,14 @@
+ 
+ 
+ # One Linux we use ldconfig.
+-use_ldconfig=yes
++case "$host_os" in
++blueyos*)
++  use_ldconfig=no
++  ;;
++*)
++  use_ldconfig=yes
++  ;;
++esac
+ 
+ if test $host = $build; then
+   # If $prefix/include/{net,scsi} are symlinks, make install will
