@@ -103,6 +103,7 @@ configure_build() {
       --build="$(gcc -dumpmachine)" \
       --prefix="${GLIBC_PREFIX}" \
       --with-headers="${SYSROOT}/include" \
+      --disable-cet \
       --disable-werror \
       --enable-kernel=3.2.0 \
       CC="${gcc}"
